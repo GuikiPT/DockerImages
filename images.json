@@ -1,0 +1,14 @@
+{
+  "images": [
+    {
+      "id": "pelican-golang-alpine",
+      "description": "Base image for Pelican runtime built on Alpine with Go installed.",
+      "context": "pelican/golang-alpine",
+      "dockerfile": "pelican/golang-alpine/Dockerfile",
+      "platforms": [
+        "linux/amd64"
+      ],
+      "publish_latest": true
+    }
+  ]
+}

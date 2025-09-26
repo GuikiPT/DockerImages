@@ -1,0 +1,110 @@
+name: Build and Publish Docker Images
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  prepare:
+    name: Prepare image matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Load image manifest
+        id: matrix
+        run: |
+          MATRIX=$(jq -c '.images
+            | map(
+                .publish_latest = (.publish_latest // false) |
+                .platforms = (.platforms // ["linux/amd64"])
+              )' images.json)
+
+          if [ -z "$MATRIX" ] || [ "$MATRIX" = "[]" ]; then
+            echo "No images defined in images.json" >&2
+            exit 1
+          fi
+
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+
+  build-and-push:
+    name: Build and publish ${{ matrix.id }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata
+        id: meta
+        run: |
+          echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ${{ secrets.DOCKER_REGISTRY }}
+
+      - name: Prepare tag list
+        id: tag_list
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKERHUB_PROJECT_NAME: ${{ secrets.DOCKERHUB_PROJECT_NAME }}
+          IMAGE_REPOSITORY_OVERRIDE: ${{ matrix.repository }}
+          BASE_TAG: ${{ matrix.id }}
+          PUBLISH_LATEST: ${{ matrix.publish_latest }}
+          SHORT_SHA: ${{ steps.meta.outputs.SHORT_SHA }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ -n "$IMAGE_REPOSITORY_OVERRIDE" ]; then
+            repo="$IMAGE_REPOSITORY_OVERRIDE"
+          elif [ -n "$DOCKER_USERNAME" ] && [ -n "$DOCKERHUB_PROJECT_NAME" ]; then
+            repo="$DOCKER_USERNAME/$DOCKERHUB_PROJECT_NAME"
+          else
+            repo="localtest/$BASE_TAG"
+          fi
+
+          tags=("$repo:$BASE_TAG" "$repo:$BASE_TAG-$SHORT_SHA")
+          if [ "$PUBLISH_LATEST" = "true" ] && [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            tags+=("$repo:latest")
+          fi
+
+          {
+            echo "value<<EOF"
+            printf '%s\n' "${tags[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and publish image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: ${{ github.event_name != 'pull_request' }}
+          platforms: ${{ join(matrix.platforms, ',') }}
+          tags: ${{ steps.tag_list.outputs.value }}
+          cache-from: type=gha,scope=${{ matrix.id }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.id }}
