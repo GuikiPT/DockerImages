@@ -2,7 +2,7 @@
 
 registry="forgejo.guiki.pt"
 owner="guikipt"
-image="golang-alpine"
+image="pelican-golang-alpine"
 tag="latest"
 
 docker build -t ${registry}/${owner}/${image}:${tag} .
