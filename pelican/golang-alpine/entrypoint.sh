@@ -1,3 +1,7 @@
+#!/bin/sh
+
+set -eu
+
 TZ=${TZ:-UTC}
 export TZ
 
