@@ -9,6 +9,16 @@
         "linux/amd64"
       ],
       "publish_latest": true
+    },
+    {
+      "id": "pelican-playwright-nodejs",
+      "description": "Base image for Pelican runtime with Node.js and Playwright for browser automation.",
+      "context": "pelican/playwright-nodejs",
+      "dockerfile": "pelican/playwright-nodejs/Dockerfile",
+      "platforms": [
+        "linux/amd64"
+      ],
+      "publish_latest": true
     }
   ]
 }

@@ -1,15 +1,21 @@
-name: Build and Publish Docker Images
+name: Build and Publish Playwright NodeJS Docker Image
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'pelican/playwright-nodejs/**'
+      - '.github/workflows/playwright-nodejs.yml'
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
+    paths:
+      - 'pelican/playwright-nodejs/**'
+      - '.github/workflows/playwright-nodejs.yml'
 
 jobs:
   prepare:
-    name: Prepare image matrix
+    name: Prepare playwright-nodejs image matrix
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
@@ -19,17 +25,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Load image manifest
+      - name: Load playwright-nodejs image config
         id: matrix
         run: |
           MATRIX=$(jq -c '.images
+            | map(select(.id == "pelican-playwright-nodejs"))
             | map(
                 .publish_latest = (.publish_latest // false) |
                 .platforms = (.platforms // ["linux/amd64"])
               )' images.json)
 
           if [ -z "$MATRIX" ] || [ "$MATRIX" = "[]" ]; then
-            echo "No images defined in images.json" >&2
+            echo "No playwright-nodejs image defined in images.json" >&2
             exit 1
           fi
 
