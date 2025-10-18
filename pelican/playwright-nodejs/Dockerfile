@@ -1,12 +1,26 @@
-FROM --platform=$TARGETOS/$TARGETARCH node:24-bookworm-slim
-LABEL author="GuikiPT"
+FROM        --platform=$TARGETOS/$TARGETARCH ubuntu:noble
+LABEL       author="GuikiPT"
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG TZ=America/Los_Angeles
+
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 
 # Set stop signal
 STOPSIGNAL SIGINT
 
-# Install base system packages AS ROOT
-RUN apt update \
-	&& apt -y install \
+# === INSTALL Node.js and Pelican dependencies ===
+RUN apt-get update && \
+	# Install Node.js
+	apt-get install -y curl wget gpg ca-certificates && \
+	mkdir -p /etc/apt/keyrings && \
+	curl -sL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
+	echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" >> /etc/apt/sources.list.d/nodesource.list && \
+	apt-get update && \
+	apt-get install -y nodejs && \
+	# Pelican runtime dependencies
+	apt-get install -y --no-install-recommends \
 	ffmpeg \
 	iproute2 \
 	git \
@@ -14,56 +28,47 @@ RUN apt update \
 	libsqlite3-dev \
 	python3 \
 	python3-dev \
-	ca-certificates \
 	dnsutils \
 	tzdata \
 	zip \
 	tar \
-	curl \
 	build-essential \
 	libtool \
 	iputils-ping \
-	libnss3 \
-	tini \
-	&& apt-get clean \
-	&& rm -rf /var/lib/apt/lists/*
+	openssh-client \
+	tini && \
+	# Install npm global packages
+	npm install --global npm@latest typescript ts-node @types/node && \
+	# Install pnpm
+	npm install -g corepack && \
+	corepack enable && \
+	corepack prepare pnpm@latest --activate && \
+	# Clean apt cache
+	rm -rf /var/lib/apt/lists/* && \
+	# Create the container user (Pelican template)
+	useradd -m -d /home/container container
 
-# Install Node.js global packages AS ROOT
-RUN npm install --global npm@latest typescript ts-node @types/node
-
-# Install pnpm
-RUN npm install -g corepack
-RUN corepack enable
-RUN corepack prepare pnpm@latest --activate
-
-# Install Playwright globally AS ROOT
-RUN npm install -g playwright
-
-# Create the container user first
-RUN useradd -m -d /home/container container
-
-# Set a shared browser path accessible by all users
+# === BAKE BROWSERS INTO IMAGE ===
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-# Create the browser directory and set proper ownership
-RUN mkdir -p /ms-playwright && \
+# Install Playwright and browsers
+RUN mkdir /ms-playwright && \
+	mkdir /ms-playwright-agent && \
+	cd /ms-playwright-agent && \
+	npm init -y && \
+	npm install playwright && \
+	npm exec --no -- playwright install --with-deps chromium && \
+	rm -rf /var/lib/apt/lists/* && \
+	rm -rf /ms-playwright-agent && \
+	rm -rf ~/.npm/ && \
+	chown -R container:container /ms-playwright && \
 	chmod -R 755 /ms-playwright
 
-# Install browsers with dependencies to the shared location AS ROOT
-RUN PLAYWRIGHT_BROWSERS_PATH=/ms-playwright npx playwright install --with-deps chromium && \
-	chmod -R 755 /ms-playwright && \
-	chown -R container:container /ms-playwright
-
-# Set environment variable so Node can find globally installed modules
-ENV NODE_PATH=/usr/local/lib/node_modules
-
-# Switch to container user
+# Switch to container user (Pelican template)
 USER container
 ENV USER=container HOME=/home/container
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 WORKDIR /home/container
 
-# Copy entrypoint
 COPY --chown=container:container ./entrypoint.sh /entrypoint.sh
 USER root
 RUN chmod +x /entrypoint.sh
