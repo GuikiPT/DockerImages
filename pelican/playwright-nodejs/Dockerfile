@@ -37,8 +37,12 @@ RUN apt-get update && \
 	iputils-ping \
 	openssh-client \
 	tini && \
-	# Install npm global packages
+	# Install npm global packages and verify installation
 	npm install --global npm@latest typescript ts-node @types/node && \
+	# Verify npm and node paths
+	which npm && which node && npm --version && node --version && \
+	# Verify global packages
+	which ts-node && ts-node --version && \
 	# Install pnpm
 	npm install -g corepack && \
 	corepack enable && \
@@ -67,6 +71,8 @@ RUN mkdir /ms-playwright && \
 # Switch to container user (Pelican template)
 USER container
 ENV USER=container HOME=/home/container
+ENV PATH=/usr/local/bin:$PATH
+ENV NODE_PATH=/usr/local/lib/node_modules
 WORKDIR /home/container
 
 COPY --chown=container:container ./entrypoint.sh /entrypoint.sh
