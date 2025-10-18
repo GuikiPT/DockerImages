@@ -36,17 +36,18 @@ RUN npm install -g corepack
 RUN corepack enable
 RUN corepack prepare pnpm@latest --activate
 
-# Install Playwright globally and browsers with system dependencies AS ROOT
+# Install Playwright globally AS ROOT
 RUN npm install -g playwright
+
+# Set a shared browser path accessible by all users
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# Install browsers with dependencies to the shared location AS ROOT
 RUN npx playwright install --with-deps chromium
 
-# Create the container user
-RUN useradd -m -d /home/container container
-
-# Set up a symlink so container user can access global node_modules
-RUN mkdir -p /home/container/node_modules && \
-    ln -s /usr/local/lib/node_modules/playwright /home/container/node_modules/playwright && \
-    chown -R container:container /home/container
+# Create the container user and give access to browser directory
+RUN useradd -m -d /home/container container && \
+    chmod -R 755 /ms-playwright
 
 # Set environment variable so Node can find globally installed modules
 ENV NODE_PATH=/usr/local/lib/node_modules
