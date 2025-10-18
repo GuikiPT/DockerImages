@@ -34,6 +34,7 @@ RUN corepack enable
 RUN corepack prepare pnpm@latest --activate
 
 # Custom Playwright installation
+RUN npm install -g playwright
 RUN npx playwright install --with-deps chromium
 
 USER container
