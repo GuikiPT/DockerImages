@@ -1,26 +1,13 @@
-FROM        --platform=$TARGETOS/$TARGETARCH ubuntu:noble
-LABEL       author="GuikiPT"
+FROM        --platform=$TARGETOS/$TARGETARCH node:24-bookworm-slim
 
-ARG DEBIAN_FRONTEND=noninteractive
-ARG TZ=America/Los_Angeles
+LABEL       author="Michael Parker" maintainer="parker@pterodactyl.io"
 
-ENV LANG=C.UTF-8
-ENV LC_ALL=C.UTF-8
-
-# Set stop signal
+# add container user and set stop signal
+RUN         useradd -m -d /home/container container
 STOPSIGNAL SIGINT
 
-# === INSTALL Node.js and Pelican dependencies ===
-RUN apt-get update && \
-	# Install Node.js
-	apt-get install -y curl wget gpg ca-certificates && \
-	mkdir -p /etc/apt/keyrings && \
-	curl -sL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
-	echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" >> /etc/apt/sources.list.d/nodesource.list && \
-	apt-get update && \
-	apt-get install -y nodejs && \
-	# Pelican runtime dependencies
-	apt-get install -y --no-install-recommends \
+RUN         apt update \
+	&& apt -y install \
 	ffmpeg \
 	iproute2 \
 	git \
@@ -28,57 +15,38 @@ RUN apt-get update && \
 	libsqlite3-dev \
 	python3 \
 	python3-dev \
+	ca-certificates \
 	dnsutils \
 	tzdata \
 	zip \
 	tar \
+	curl \
 	build-essential \
 	libtool \
 	iputils-ping \
-	openssh-client \
-	tini && \
-	# Install npm global packages and verify installation
-	npm install --global npm@latest typescript ts-node @types/node && \
-	# Verify npm and node paths
-	which npm && which node && npm --version && node --version && \
-	# Verify global packages
-	which ts-node && ts-node --version && \
-	# Install pnpm
-	npm install -g corepack && \
-	corepack enable && \
-	corepack prepare pnpm@latest --activate && \
-	# Clean apt cache
-	rm -rf /var/lib/apt/lists/* && \
-	# Create the container user (Pelican template)
-	useradd -m -d /home/container container
+	libnss3 \
+	tini
 
-# === BAKE BROWSERS INTO IMAGE ===
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+# Custom
+RUN apt install -y libatk1.0-0\                
+	libatk-bridge2.0-0\
+	libcups2\
+	libatspi2.0-0\
+	libxcomposite1\
+	libxdamage1
 
-# Install Playwright and browsers
-RUN mkdir /ms-playwright && \
-	mkdir /ms-playwright-agent && \
-	cd /ms-playwright-agent && \
-	npm init -y && \
-	npm install playwright && \
-	npm exec --no -- playwright install --with-deps chromium && \
-	rm -rf /var/lib/apt/lists/* && \
-	rm -rf /ms-playwright-agent && \
-	rm -rf ~/.npm/ && \
-	chown -R container:container /ms-playwright && \
-	chmod -R 755 /ms-playwright
+RUN         npm install --global npm@latest typescript ts-node @types/node
 
-# Switch to container user (Pelican template)
-USER container
-ENV USER=container HOME=/home/container
-ENV PATH=/usr/local/bin:$PATH
-ENV NODE_PATH=/usr/local/lib/node_modules
-WORKDIR /home/container
+# install pnpm
+RUN         npm install -g corepack
+RUN         corepack enable
+RUN         corepack prepare pnpm@latest --activate
 
-COPY --chown=container:container ./entrypoint.sh /entrypoint.sh
-USER root
-RUN chmod +x /entrypoint.sh
-USER container
+USER        container
+ENV         USER=container HOME=/home/container
+WORKDIR     /home/container
 
-ENTRYPOINT ["/usr/bin/tini", "-g", "--"]
-CMD ["/entrypoint.sh"]
+COPY        --chown=container:container ./entrypoint.sh /entrypoint.sh
+RUN         chmod +x /entrypoint.sh
+ENTRYPOINT    ["/usr/bin/tini", "-g", "--"]
+CMD         ["/entrypoint.sh"]
