@@ -59,6 +59,7 @@ RUN         apt update \
                 libxss1 \
                 libxtst6 \
                 fonts-liberation \
+                fonts-noto-color-emoji \
                 xdg-utils \
             && rm -rf /var/lib/apt/lists/*
 
